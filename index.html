@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dopamine Drift</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #fff; text-align: center; transition: background-color 0.5s ease; }
+    body.low-baseline { background-color: #400000; }
+    #gameCanvas { border: 1px solid #fff; background: #222; margin-top: 20px; transition: box-shadow 0.3s ease; }
+    #gameCanvas.pulse { box-shadow: 0 0 20px 5px #0f0; }
+    .btn { padding: 10px 20px; margin: 5px; background: #444; color: #fff; border: none; cursor: pointer; transition: transform 0.2s ease; }
+    .btn:disabled { background: #222; color: #777; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { background: #666; transform: scale(1.05); }
+    #feedback { margin-top: 10px; height: 20px; font-weight: bold; color: #0f0; transition: opacity 0.5s ease, transform 0.3s ease; }
+    #feedback.show { transform: scale(1.2); }
+  </style>
+</head>
+<body>
+  <h1>Dopamine Drift</h1>
+  <p>Keep your dopamine balance in check. Avoid addiction. Choose wisely.</p>
+
+  <canvas id="gameCanvas" width="600" height="300"></canvas>
+  <div id="feedback"></div>
+
+  <div>
+    <button class="btn" id="btn_socialMedia" onclick="doActivity('socialMedia')">Social Media</button>
+    <button class="btn" id="btn_sugar" onclick="doActivity('sugar')">Sugar</button>
+    <button class="btn" id="btn_exercise" onclick="doActivity('exercise')">Exercise</button>
+    <button class="btn" id="btn_meditation" onclick="doActivity('meditation')">Meditation</button>
+    <button class="btn" id="btn_rest" onclick="restActivity()">Rest</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const feedback = document.getElementById("feedback");
+
+    let dopamine = 100;
+    let baseline = 100;
+    let history = [];
+    const maxHistory = 60;
+
+    const activities = {
+      socialMedia: { baseBoost: 20, fade: 5, penalty: 10, cooldown: 100, uses: 0, lastUsed: -100, minBaseline: 40 },
+      sugar: { baseBoost: 30, fade: 10, penalty: 20, cooldown: 100, uses: 0, lastUsed: -100, minBaseline: 50 },
+      exercise: { baseBoost: 15, fade: 2, penalty: -5, cooldown: 50, uses: 0, lastUsed: -100, minBaseline: 0 },
+      meditation: { baseBoost: 5, fade: 0, penalty: -10, cooldown: 30, uses: 0, lastUsed: -100, minBaseline: 0 },
+    };
+
+    let tick = 0;
+
+    function pulseCanvas() {
+      canvas.classList.add("pulse");
+      setTimeout(() => canvas.classList.remove("pulse"), 300);
+    }
+
+    function updateBackgroundWarning() {
+      document.body.classList.toggle("low-baseline", baseline < 50);
+    }
+
+    function showFeedback(msg, color = '#0f0') {
+      feedback.textContent = msg;
+      feedback.style.color = color;
+      feedback.classList.add("show");
+      feedback.style.opacity = 1;
+      setTimeout(() => feedback.style.opacity = 0, 1500);
+      setTimeout(() => feedback.classList.remove("show"), 500);
+    }
+
+    function doActivity(type) {
+      const a = activities[type];
+      if (tick - a.lastUsed < a.cooldown || baseline < a.minBaseline) return;
+
+      a.uses++;
+      a.lastUsed = tick;
+
+      const actualBoost = Math.max(0, a.baseBoost - a.fade * a.uses);
+      dopamine += actualBoost;
+      baseline -= a.penalty;
+      if (dopamine > 200) dopamine = 200;
+
+      pulseCanvas();
+      updateBackgroundWarning();
+      showFeedback(`+${actualBoost} Dopamine from ${type.replace(/^[a-z]/, c => c.toUpperCase())}`);
+      log(`Did ${type}, dopamine +${actualBoost}, baseline -${a.penalty}`);
+    }
+
+    function restActivity() {
+      Object.keys(activities).forEach(key => {
+        const a = activities[key];
+        if (a.uses > 0) a.uses--;
+      });
+      baseline += 1;
+      updateBackgroundWarning();
+      showFeedback("Rested. Rebuilding baseline...", "#0ff");
+      log("Rested: reduced overuse and slightly raised baseline.");
+    }
+
+    function decay() {
+      if (dopamine > baseline) dopamine -= 1;
+      else if (dopamine < baseline) dopamine += 0.5;
+    }
+
+    function drawGraph() {
+      ctx.clearRect(0, 0, 600, 300);
+
+      ctx.beginPath();
+      ctx.moveTo(0, 300 - history[0]);
+      for (let i = 1; i < history.length; i++) {
+        ctx.lineTo(i * (600 / maxHistory), 300 - history[i]);
+      }
+      ctx.strokeStyle = "lime";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, 300 - baseline);
+      ctx.lineTo(600, 300 - baseline);
+      ctx.strokeStyle = "red";
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillText(`Dopamine: ${Math.round(dopamine)}`, 10, 20);
+      ctx.fillText(`Baseline: ${Math.round(baseline)}`, 10, 40);
+    }
+
+    function updateButtons() {
+      Object.keys(activities).forEach(key => {
+        const a = activities[key];
+        const btn = document.getElementById(`btn_${key}`);
+        const available = tick - a.lastUsed >= a.cooldown;
+        const actualBoost = Math.max(0, a.baseBoost - a.fade * a.uses);
+        const meetsBaseline = baseline >= a.minBaseline;
+        btn.disabled = !available || actualBoost <= 0 || !meetsBaseline;
+      });
+    }
+
+    function loop() {
+      tick++;
+      decay();
+      history.push(dopamine);
+      if (history.length > maxHistory) history.shift();
+      drawGraph();
+      updateButtons();
+      requestAnimationFrame(loop);
+    }
+
+    function log(message) {
+      console.log(`[LOG] ${message}`);
+    }
+
+    for (let i = 0; i < maxHistory; i++) history.push(baseline);
+    updateBackgroundWarning();
+    loop();
+  </script>
+</body>
+</html>
